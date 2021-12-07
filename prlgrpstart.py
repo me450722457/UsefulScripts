@@ -18,47 +18,45 @@ class PrlStart(threading.Thread):
 
 
 class GrpStart:
-    run_command = lambda x: ['/bin/sh', '-c', '%s' % x]
-
-    def __init__(self, grpname):
-        self.grpname = grpname
+    def __init__(self, action, vm_group):
+        assert action in ('start', 'stop'), 'Action error. Only start or stop'
+        self.vm_group = vm_group
+        self.action = action
 
     @staticmethod
     def run_cmd(cmd):
-        res = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+        run_command = lambda x: ['/bin/sh', '-c', '%s' % x]
+        res = subprocess.Popen(run_command(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
         result = res.communicate()[0]
         return result
 
     @staticmethod
     def get_vm_info():
-        cmd = GrpStart.run_command('prlctl list -ij')
-        res = GrpStart.run_cmd(cmd)
+        res = GrpStart.run_cmd('prlctl list -ij')
         return res
 
     def filter_vm(self):
         vm_info = self.get_vm_info()
         vm_info = json.loads(vm_info)
-        vm_to_start = []
         for vm in vm_info:
-            if vm.get('Description') == self.grpname:
-                vm_to_start.append(vm.get('Name'))
-        return vm_to_start
+            if vm.get('Description') == self.vm_group:
+                yield vm.get('Name')
 
-    def start_vm(self, vm):
-        vm_start_cmd = GrpStart.run_command('prlctl start %s' % vm)
+    def start_or_stop(self, vm):
         try:
-            self.run_cmd(vm_start_cmd)
+            GrpStart.run_cmd('prlctl %s %s' % (self.action, vm))
         except Exception as e:
             print(e)
 
 
 def main():
-    grpname = sys.argv[1]
-    startvm = GrpStart(grpname)
-    vms = startvm.filter_vm()
+    cmd = sys.argv[1:]
+    action, vm_group = cmd
+    start_vm = GrpStart(action, vm_group)
+    vms = start_vm.filter_vm()
     thread_pool = []
     for vm in vms:
-        p = PrlStart(startvm.start_vm, (vm,))
+        p = PrlStart(start_vm.start_or_stop, (vm,))
         thread_pool.append(p)
     for i in thread_pool:
         i.start()
