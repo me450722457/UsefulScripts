@@ -66,7 +66,7 @@ class GrpStart:
             if vm.get('Description') == self.vm_group:
                 yield vm.get('Name')
 
-    @date_flashback
+
     def start_or_stop(self, vm):
         try:
             res = GrpStart.run_cmd('prlctl %s %s' % (self.action, vm))
@@ -75,6 +75,7 @@ class GrpStart:
         return res
 
 
+@date_flashback
 def main():
     cmd = sys.argv[1:]
     action, vm_group = cmd
