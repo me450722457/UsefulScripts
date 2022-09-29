@@ -1,25 +1,37 @@
 # /usr/local/bin/python3
 import datetime
-import functools
 import json
 import subprocess
 import sys
 import threading
 
+SUDO_PASSWD = '124124'
+SUDO = 'echo %s | sudo' % SUDO_PASSWD
 
-def date_flashback(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        # flashback date
-        date_setting = '20190101'
-        today = datetime.date.today().strftime('%Y%m%d')
-        GrpStart.run_cmd('echo "124124" | sudo date  -v +1d -f "%%Y%%m%%d" "%s" +%%F' % date_setting)
-        res = func(*args, **kwargs)
-        # redo date
-        GrpStart.run_cmd('echo "124124" | sudo date  -v +1d -f "%%Y%%m%%d" "%s" +%%F' % today)
+
+class PreCheck(object):
+    def __init__(self, func):
+        self.func = func
+        self.today = datetime.date.today().strftime('%Y%m%d')
+        self.data_setting = '20190101'
+
+    def __call__(self, *args, **kwargs):
+        license_status = self.license_checker()['status']
+        if license_status == 'ACTIVE':
+            return self.func(*args, **kwargs)
+
+        self.flaskback(self.data_setting)
+        self.func(*args, **kwargs)
+        self.flaskback(self.today)
+
+        return
+
+    def license_checker(self):
+        res = json.loads(GrpStart.run_cmd('prlsrvctl info --license -j'))
         return res
 
-    return wrapper
+    def flaskback(self, data):
+        GrpStart.run_cmd('%s date  -v +1d -f "%%Y%%m%%d" "%s" +%%F' % (SUDO, data))
 
 
 class PrlStart(threading.Thread):
@@ -66,16 +78,15 @@ class GrpStart:
             if vm.get('Description') == self.vm_group:
                 yield vm.get('Name')
 
-
     def start_or_stop(self, vm):
         try:
             res = GrpStart.run_cmd('prlctl %s %s' % (self.action, vm))
+            return res
         except Exception as e:
             print(e)
-        return res
 
 
-@date_flashback
+@PreCheck
 def main():
     cmd = sys.argv[1:]
     action, vm_group = cmd
